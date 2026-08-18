@@ -86,6 +86,13 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
   const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
       const file = e.target.files[0];
+      const maxSizeBytes = 15 * 1024 * 1024; // 15MB limit
+      if (file.size > maxSizeBytes) {
+        setError('Video file size exceeds the 15MB storage quota. Please use the "Paste Direct URL" tab for larger videos!');
+        setVideoFile(null);
+        return;
+      }
+      setError(null);
       setVideoFile(file);
       // Auto-detect video duration from file metadata
       const tempVideo = document.createElement('video');
@@ -326,7 +333,8 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
                 ) : (
                   <div>
                     <UploadCloud className="w-8 h-8 mx-auto mb-1.5 text-slate-400" />
-                    <p className="text-xs text-slate-500">Click to select video (MP4, WebM)</p>
+                    <p className="text-xs text-slate-600 font-medium">Click to select video (MP4, WebM)</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Maximum size: 15MB. For larger videos, use a direct link.</p>
                   </div>
                 )}
               </div>

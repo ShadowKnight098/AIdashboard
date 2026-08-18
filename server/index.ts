@@ -40,6 +40,17 @@ async function getUserId(req: express.Request): Promise<string> {
   const activeClient = authContext.getStore() || supabaseGlobal;
   const { data, error } = await activeClient.auth.getUser();
   if (error || !data.user) throw new Error('Invalid or expired token');
+
+  // Ensure user row exists in users table so foreign key references work seamlessly
+  try {
+    await supabaseGlobal.from('users').upsert({
+      id: data.user.id,
+      email: data.user.email || 'user@example.com',
+      display_name: data.user.user_metadata?.display_name || data.user.email?.split('@')[0] || 'Student',
+      created_at: data.user.created_at || new Date().toISOString(),
+    }, { onConflict: 'id' });
+  } catch {}
+
   return data.user.id;
 }
 
@@ -538,7 +549,12 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', supabase_url: supabaseUrl });
 });
 
-app.listen(PORT, async () => {
-  console.log(`✨ TechScroll AI Backend at http://localhost:${PORT}`);
-  await ensureReelsSeeded();
-});
+export { app };
+
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, async () => {
+    console.log(`✨ TechScroll AI Backend at http://localhost:${PORT}`);
+    await ensureReelsSeeded();
+  });
+}
+

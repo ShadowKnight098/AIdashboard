@@ -12,7 +12,8 @@ export type Category =
   | 'Hardware'
   | 'Career'
   | 'WebDev'
-  | 'DevOps';
+  | 'DevOps'
+  | 'Timepass';
 
 export type Difficulty = 'Beginner' | 'Intermediate' | 'Advanced';
 

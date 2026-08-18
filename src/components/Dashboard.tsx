@@ -40,20 +40,21 @@ const CATEGORY_COLORS: Record<string, string> = {
   AI: '#3654FF', DSA: '#0F9C93', HLD: '#C98A2C', Java: '#E05252',
   Cloud: '#6B4EFF', Cybersecurity: '#1DB954', WebDev: '#F97316',
   Hardware: '#8B5CF6', Career: '#EC4899', DevOps: '#14B8A6',
+  Timepass: '#D97706',
 };
 
 const StatCard: React.FC<{
   icon: React.ReactNode; label: string; value: string | number; sub?: string; accent?: string;
 }> = ({ icon, label, value, sub, accent = '#3654FF' }) => (
-  <div className="flat-card p-4 flex flex-col gap-2">
+  <div className="flat-card p-4 sm:p-5 flex flex-col gap-2 shadow-sm">
     <div className="flex items-center justify-between">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{label}</span>
-      <div className="w-7 h-7 rounded-[6px] flex items-center justify-center" style={{ background: `${accent}18` }}>
+      <span className="font-mono text-xs uppercase tracking-wider text-slate-500 font-semibold">{label}</span>
+      <div className="w-8 h-8 rounded-[8px] flex items-center justify-center" style={{ background: `${accent}18` }}>
         <div style={{ color: accent }}>{icon}</div>
       </div>
     </div>
-    <div className="text-2xl font-display font-bold text-[#12172B]">{value}</div>
-    {sub && <span className="font-mono text-[10px] text-slate-400">{sub}</span>}
+    <div className="text-2xl sm:text-3xl font-display font-bold text-[#12172B]">{value}</div>
+    {sub && <span className="font-mono text-xs text-slate-500">{sub}</span>}
   </div>
 );
 

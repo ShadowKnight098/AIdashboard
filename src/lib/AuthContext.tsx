@@ -27,19 +27,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    let mounted = true;
+
+    // Safety timeout: never stay stuck on loading for more than 2.5 seconds
+    const timer = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 2500);
+
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const meta = session.user.user_metadata;
-        setDisplayName(meta?.display_name || session.user.email?.split('@')[0] || 'Student');
-      }
-      setLoading(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (!mounted) return;
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          const meta = session.user.user_metadata;
+          setDisplayName(meta?.display_name || session.user.email?.split('@')[0] || 'Student');
+        }
+      })
+      .catch(err => {
+        console.warn('Session load notice:', err);
+      })
+      .finally(() => {
+        if (mounted) {
+          setLoading(false);
+          clearTimeout(timer);
+        }
+      });
 
     // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -48,9 +69,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setDisplayName('');
       }
+      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = async (email: string, password: string, name: string) => {

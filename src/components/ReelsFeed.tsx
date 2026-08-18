@@ -279,29 +279,29 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({ onInspectReel }) => {
         </div>
 
         {/* Top bar */}
-        <div className="relative z-20 p-3 flex items-center justify-between pointer-events-auto">
-          <span className="text-[10px] font-mono text-white/80 bg-black/40 px-2 py-0.5 rounded-[4px]">
+        <div className="relative z-20 p-3.5 flex items-center justify-between pointer-events-auto">
+          <span className="text-xs font-mono font-semibold text-white/90 bg-black/50 px-2.5 py-1 rounded-[4px] border border-white/10">
             {currentIndex + 1} / {feed.length}
           </span>
-          <button onClick={e => { e.stopPropagation(); setIsMuted(p => !p); }} className="w-7 h-7 rounded-[4px] bg-black/50 border border-white/20 flex items-center justify-center text-white">
-            {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+          <button onClick={e => { e.stopPropagation(); setIsMuted(p => !p); }} className="w-8 h-8 rounded-[6px] bg-black/50 border border-white/20 flex items-center justify-center text-white active:scale-90">
+            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
         </div>
 
         {/* Bottom overlay: title + actions */}
-        <div className="relative z-20 p-4 flex items-end justify-between gap-3 pointer-events-auto mt-auto">
+        <div className="relative z-20 p-4 sm:p-5 flex items-end justify-between gap-3 pointer-events-auto mt-auto">
           <div className="flex-1">
-            <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-              <span className="px-2 py-0.5 rounded-[4px] bg-[#12172B]/85 text-white font-mono text-[10px]">{currentReel.category}</span>
-              <span className="px-1.5 py-0.5 rounded-[4px] bg-white/90 text-[#12172B] font-mono text-[10px]">{currentReel.format}</span>
-              <span className="px-1.5 py-0.5 rounded-[4px] bg-black/50 text-white font-mono text-[10px]">{currentReel.difficulty}</span>
+            <div className="flex flex-wrap items-center gap-1.5 mb-2">
+              <span className="px-2.5 py-0.5 rounded-[4px] bg-[#12172B]/90 text-white font-mono text-xs font-semibold">{currentReel.category}</span>
+              <span className="px-2 py-0.5 rounded-[4px] bg-white/95 text-[#12172B] font-mono text-xs font-semibold">{currentReel.format}</span>
+              <span className="px-2 py-0.5 rounded-[4px] bg-black/60 text-white font-mono text-xs">{currentReel.difficulty}</span>
             </div>
-            <h2 className="text-xs font-semibold text-white leading-snug drop-shadow mb-2 font-display line-clamp-2">{currentReel.title}</h2>
+            <h2 className="text-sm sm:text-base font-bold text-white leading-snug drop-shadow-md mb-2.5 font-display line-clamp-2">{currentReel.title}</h2>
             <button
               onClick={e => { e.stopPropagation(); onInspectReel(currentReel.id); }}
-              className="inline-flex items-center gap-1 text-[10px] font-mono text-white/90 bg-black/50 hover:bg-black/70 px-2 py-1 rounded-[4px] border border-white/20"
+              className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-white bg-black/60 hover:bg-black/80 active:scale-95 px-3 py-1.5 rounded-[6px] border border-white/25 shadow-sm"
             >
-              <Binary className="w-3 h-3 text-[#0F9C93]" /> Inspect
+              <Binary className="w-3.5 h-3.5 text-[#0F9C93]" /> Inspect
             </button>
           </div>
           <div className="flex flex-col items-center gap-2.5 sm:gap-3">

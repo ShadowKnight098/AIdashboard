@@ -66,6 +66,27 @@ app.use((req, _res, next) => {
   next();
 });
 
+async function ensureStorageBucketExists() {
+  if (!isSupabaseConfigured || !supabaseGlobal) return;
+  try {
+    const { data: buckets } = await supabaseGlobal.storage.listBuckets();
+    const hasBucket = buckets?.some(b => b.id === 'reels-videos');
+    if (!hasBucket) {
+      console.log('⏳ Creating storage bucket "reels-videos"...');
+      const { error } = await supabaseGlobal.storage.createBucket('reels-videos', {
+        public: true,
+      });
+      if (error) {
+        console.warn('Could not create bucket programmatically (requires service role key):', error.message);
+      } else {
+        console.log('✓ Public bucket "reels-videos" created successfully!');
+      }
+    }
+  } catch (err: any) {
+    console.warn('Storage bucket check skipped:', err.message);
+  }
+}
+
 // ── Auto-seed reels ──
 async function ensureReelsSeeded() {
   if (!isSupabaseConfigured || !supabaseGlobal) return;
@@ -539,6 +560,8 @@ app.post('/api/demo/reset', async (req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', supabase_url: supabaseUrl });
 });
+
+ensureStorageBucketExists().catch(() => {});
 
 export { app };
 

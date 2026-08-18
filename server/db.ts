@@ -325,4 +325,7 @@ export const db = {
     localDb.recommendations.unshift(newRec);
     return newRec;
   },
+  async resetDemo(): Promise<void> {
+    localDb.reset();
+  }
 };

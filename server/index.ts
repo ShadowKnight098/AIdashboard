@@ -1,12 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import { getAIProvider } from './lib/ai-provider.js';
 import { generateRecommendation } from './lib/recommend.js';
 import { ALL_SEEDED_REELS } from './seed-data.js';
 import { authContext } from './lib/context.js';
-import { db } from './db.js';
+import { db, supabase, isSupabaseConfigured } from './db.js';
 import type { Reel } from '../shared/types.js';
 
 dotenv.config();
@@ -17,24 +17,31 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// ── Global Supabase Admin/Anon Client ──
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
-const supabaseGlobal = createClient(supabaseUrl, supabaseKey);
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+const supabaseGlobal = supabase;
 
 // ── Middleware: Wrap each request in a scoped Supabase client (for RLS) ──
 app.use((req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const requestScopedClient = createClient(supabaseUrl, supabaseKey, {
-    global: {
-      headers: authHeader ? { Authorization: authHeader } : {},
-    },
-  });
-  authContext.run(requestScopedClient, () => next());
+  if (isSupabaseConfigured && supabaseUrl && supabaseKey) {
+    const authHeader = req.headers.authorization;
+    const requestScopedClient = createClient(supabaseUrl, supabaseKey, {
+      global: {
+        headers: authHeader ? { Authorization: authHeader } : {},
+      },
+    });
+    authContext.run(requestScopedClient, () => next());
+  } else {
+    next();
+  }
 });
 
 // ── Auth helper ──
 async function getUserId(req: express.Request): Promise<string> {
+  if (!isSupabaseConfigured || !supabaseGlobal) {
+    // Return standard demo user id when Supabase is not configured
+    return '00000000-0000-0000-0000-000000000001';
+  }
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Not authenticated');
   const activeClient = authContext.getStore() || supabaseGlobal;
@@ -61,19 +68,24 @@ app.use((req, _res, next) => {
 
 // ── Auto-seed reels ──
 async function ensureReelsSeeded() {
-  const { count } = await supabaseGlobal.from('reels').select('*', { count: 'exact', head: true });
-  if (count && count > 0) { console.log(`✓ Reels: ${count} rows`); return; }
-  console.log('⏳ Seeding reels...');
-  const rows = ALL_SEEDED_REELS.map(r => ({
-    id: r.id, title: r.title, description: r.description, transcript: r.transcript,
-    category: r.category, difficulty: r.difficulty, thumbnail_url: r.thumbnail_url || null,
-    source_url: r.source_url || null, video_url: r.video_url, duration_seconds: r.duration_seconds,
-    format: r.format, educational_value: r.educational_value, hype_score: r.hype_score,
-    is_candidate: r.is_candidate, uploaded_by: null, created_at: r.created_at,
-  }));
-  const { error } = await supabaseGlobal.from('reels').insert(rows);
-  if (error) console.error('Seed error:', error.message);
-  else console.log(`✓ Seeded ${rows.length} reels.`);
+  if (!isSupabaseConfigured || !supabaseGlobal) return;
+  try {
+    const { count } = await supabaseGlobal.from('reels').select('*', { count: 'exact', head: true });
+    if (count && count > 0) { console.log(`✓ Reels: ${count} rows`); return; }
+    console.log('⏳ Seeding reels...');
+    const rows = ALL_SEEDED_REELS.map(r => ({
+      id: r.id, title: r.title, description: r.description, transcript: r.transcript,
+      category: r.category, difficulty: r.difficulty, thumbnail_url: r.thumbnail_url || null,
+      source_url: r.source_url || null, video_url: r.video_url, duration_seconds: r.duration_seconds,
+      format: r.format, educational_value: r.educational_value, hype_score: r.hype_score,
+      is_candidate: r.is_candidate, uploaded_by: null, created_at: r.created_at,
+    }));
+    const { error } = await supabaseGlobal.from('reels').insert(rows);
+    if (error) console.error('Seed error:', error.message);
+    else console.log(`✓ Seeded ${rows.length} reels.`);
+  } catch (err: any) {
+    console.warn('Seed exception:', err.message);
+  }
 }
 
 // ==============================================================================
@@ -82,9 +94,8 @@ async function ensureReelsSeeded() {
 app.get('/api/dashboard', async (req, res) => {
   try {
     const userId = await getUserId(req);
-    const activeClient = authContext.getStore() || supabaseGlobal;
 
-    const { data: profile } = await activeClient.from('users').select('*').eq('id', userId).single();
+    const profile = await db.getUser(userId);
     const interactions = await db.getUserInteractions(userId);
     const profiles = await db.getUserInterestProfiles(userId);
     const latestRec = await db.getLatestRecommendation(userId);
@@ -108,8 +119,6 @@ app.get('/api/dashboard', async (req, res) => {
       .sort((a, b) => b.count - a.count);
 
     // Productivity metrics
-    // Educational minutes = sum of (duration * watch_pct * educational_value/100)
-    // Hype waste = sum of (duration * watch_pct * hype_score/100)
     let educationalMinutes = 0;
     let hypeMinutes = 0;
     let deepWatchCount = 0; // reels watched >70%
@@ -135,7 +144,7 @@ app.get('/api/dashboard', async (req, res) => {
       ? Math.round((educationalMinutes / totalMinutes) * 100)
       : 0;
 
-    // Daily streak: count consecutive days with at least 1 interaction
+    // Daily streak
     const uniqueDays = new Set(
       interactions.map(i => new Date(i.timestamp).toDateString())
     );
@@ -159,7 +168,6 @@ app.get('/api/dashboard', async (req, res) => {
       { label: 'Deep Watch ×5', target: 5, reached: deepWatchCount >= 5 },
       { label: '30 min Edu', target: 30, reached: educationalMinutes >= 30 },
     ];
-
 
     res.json({
       user_id: userId,
@@ -198,9 +206,8 @@ app.get('/api/dashboard', async (req, res) => {
 app.get('/api/feed', async (req, res) => {
   try {
     const userId = await getUserId(req);
-    const activeClient = authContext.getStore() || supabaseGlobal;
 
-    const { data: allReels } = await activeClient.from('reels').select('*');
+    const allReels = await db.getAllReels();
     const interactions = await db.getUserInteractions(userId);
 
     const watchedIds = new Set(interactions.filter(i => i.watch_percentage > 90).map(i => i.reel_id));
@@ -232,44 +239,37 @@ app.get('/api/feed', async (req, res) => {
 });
 
 // ==============================================================================
-// SIMILAR REELS — same category + difficulty, used for 10-sec trigger & analysis panel
+// SIMILAR REELS
 // ==============================================================================
 app.get('/api/similar-reels/:reelId', async (req, res) => {
   try {
     await getUserId(req);
     const { reelId } = req.params;
-    const activeClient = authContext.getStore() || supabaseGlobal;
 
-    const { data: reel } = await activeClient.from('reels').select('*').eq('id', reelId).single();
+    const reel = await db.getReel(reelId);
     if (!reel) return res.status(404).json({ error: 'Reel not found' });
 
-    // Step 1: same category, same difficulty (strictest match)
-    let { data: similar } = await activeClient
-      .from('reels')
-      .select('*')
-      .eq('category', reel.category)
-      .eq('difficulty', reel.difficulty)
-      .neq('id', reelId)
-      .order('educational_value', { ascending: false })
-      .limit(5);
+    const allReels = await db.getAllReels();
 
-    // Step 2: broaden to same category if not enough
-    if (!similar || similar.length < 3) {
-      const { data: wider } = await activeClient
-        .from('reels')
-        .select('*')
-        .eq('category', reel.category)
-        .neq('id', reelId)
-        .order('educational_value', { ascending: false })
-        .limit(8);
-      const existingIds = new Set((similar || []).map(r => r.id));
-      const extras = (wider || []).filter(r => !existingIds.has(r.id));
-      similar = [...(similar || []), ...extras].slice(0, 5);
+    // Step 1: same category, same difficulty
+    let similar = allReels
+      .filter(r => r.id !== reelId && r.category === reel.category && r.difficulty === reel.difficulty)
+      .sort((a, b) => b.educational_value - a.educational_value)
+      .slice(0, 5);
+
+    // Step 2: broaden to same category
+    if (similar.length < 3) {
+      const wider = allReels
+        .filter(r => r.id !== reelId && r.category === reel.category)
+        .sort((a, b) => b.educational_value - a.educational_value);
+      const existingIds = new Set(similar.map(r => r.id));
+      const extras = wider.filter(r => !existingIds.has(r.id));
+      similar = [...similar, ...extras].slice(0, 5);
     }
 
     res.json({
       source_reel: reel,
-      similar_reels: (similar || []).map(r => ({ ...r, is_similar: true })),
+      similar_reels: similar.map(r => ({ ...r, is_similar: true })),
     });
   } catch (err: any) {
     res.status(err.message === 'Not authenticated' ? 401 : 500).json({ error: err.message });
@@ -300,25 +300,19 @@ app.post('/api/interactions', async (req, res) => {
     // 10-second trigger: generate recommendation + fetch similar reels
     if ((watch_seconds || 0) >= 10 || (record?.watch_percentage || 0) >= 30) {
       try {
-        // 1. Get similar reels
-        const activeClient = authContext.getStore() || supabaseGlobal;
-        const { data: reelData } = await activeClient.from('reels').select('*').eq('id', reel_id).single();
+        const reelData = await db.getReel(reel_id);
         if (reelData) {
-          const { data: simData } = await activeClient
-            .from('reels')
-            .select('*')
-            .eq('category', reelData.category)
-            .neq('id', reel_id)
-            .order('educational_value', { ascending: false })
-            .limit(3);
-          similarReels = (simData || []).map(r => ({ ...r, is_similar: true })) as Reel[];
+          const allReels = await db.getAllReels();
+          similarReels = allReels
+            .filter(r => r.id !== reel_id && r.category === reelData.category)
+            .sort((a, b) => b.educational_value - a.educational_value)
+            .slice(0, 3)
+            .map(r => ({ ...r, is_similar: true })) as Reel[];
         }
 
-        // 2. Generate personalised recommendation
         const result = await generateRecommendation(userId);
         dynamicRecommendation = result.recommendation;
 
-        // Save recommendation to DB
         await db.saveRecommendation({
           user_id: userId,
           current_reel_id: reel_id,
@@ -356,17 +350,13 @@ app.post('/api/analyze-reel', async (req, res) => {
     const aiProvider = getAIProvider();
     const analysis = await aiProvider.analyzeReel(reel);
 
-    // Fetch similar reels for the analysis panel
-    const activeClient = authContext.getStore() || supabaseGlobal;
-    const { data: similar } = await activeClient
-      .from('reels')
-      .select('*')
-      .eq('category', reel.category)
-      .neq('id', reel_id)
-      .order('educational_value', { ascending: false })
-      .limit(4);
+    const allReels = await db.getAllReels();
+    const similar = allReels
+      .filter(r => r.id !== reel_id && r.category === reel.category)
+      .sort((a, b) => b.educational_value - a.educational_value)
+      .slice(0, 4);
 
-    res.json({ reel, analysis, similar_reels: similar || [] });
+    res.json({ reel, analysis, similar_reels: similar });
   } catch (err: any) {
     res.status(err.message === 'Not authenticated' ? 401 : 500).json({ error: err.message });
   }
@@ -380,7 +370,6 @@ app.post('/api/infer-interest', async (req, res) => {
     const userId = await getUserId(req);
     const interactions = await db.getUserInteractions(userId);
 
-    // If no interactions, return a default profile without crashing
     if (interactions.length === 0) {
       return res.json({
         interest_profile: {
@@ -420,9 +409,8 @@ app.post('/api/infer-interest', async (req, res) => {
   }
 });
 
-
 // ==============================================================================
-// RECOMMENDATION — with full scored candidates & guaranteed zero-crash fallback
+// RECOMMENDATION
 // ==============================================================================
 app.post('/api/recommend', async (req, res) => {
   try {
@@ -432,7 +420,8 @@ app.post('/api/recommend', async (req, res) => {
       return res.json(result);
     } catch (genErr: any) {
       console.warn('[recommend] generator warning, building safe baseline:', genErr.message);
-      const topPick = ALL_SEEDED_REELS.find(r => r.id === '30000000-0000-0000-0000-000000000001') || ALL_SEEDED_REELS[0];
+      const allReels = await db.getAllReels();
+      const topPick = allReels[0] || ALL_SEEDED_REELS[0];
       const baselineStructured = `
 ================================================================================
                        TECHSCROLL AI RECOMMENDATION
@@ -462,7 +451,7 @@ CONFIDENCE                : High
           recommended_reel: topPick,
         },
         structured_output_block: baselineStructured,
-        scored_candidates: ALL_SEEDED_REELS.filter(r => r.is_candidate).slice(0, 5).map((reel, idx) => ({
+        scored_candidates: allReels.slice(0, 5).map((reel, idx) => ({
           reel,
           score: 95 - idx * 4,
           breakdown: {
@@ -480,8 +469,6 @@ CONFIDENCE                : High
     res.status(err.message === 'Not authenticated' ? 401 : 500).json({ error: err.message });
   }
 });
-
-
 
 // ==============================================================================
 // REELS LISTING
@@ -535,10 +522,14 @@ app.post('/api/reels/upload', async (req, res) => {
 app.post('/api/demo/reset', async (req, res) => {
   try {
     const userId = await getUserId(req);
-    const activeClient = authContext.getStore() || supabaseGlobal;
-    await activeClient.from('recommendations').delete().eq('user_id', userId);
-    await activeClient.from('interest_profiles').delete().eq('user_id', userId);
-    await activeClient.from('interactions').delete().eq('user_id', userId);
+    if (isSupabaseConfigured && supabaseGlobal) {
+      await supabaseGlobal.from('recommendations').delete().eq('user_id', userId);
+      await supabaseGlobal.from('interest_profiles').delete().eq('user_id', userId);
+      await supabaseGlobal.from('interactions').delete().eq('user_id', userId);
+    } else {
+      // Local fallback reset
+      db.resetDemo?.();
+    }
     res.json({ success: true });
   } catch (err: any) {
     res.status(401).json({ error: err.message });
@@ -557,4 +548,3 @@ if (process.env.VERCEL !== '1') {
     await ensureReelsSeeded();
   });
 }
-

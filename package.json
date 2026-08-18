@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "server": "tsx watch server/index.ts",
     "seed": "tsx server/seed.ts",
+    "test": "tsx server/test-suite.ts",
     "dev:all": "concurrently -n \"server,client\" -c \"cyan,magenta\" \"npm run server\" \"npm run dev\""
   },
   "dependencies": {

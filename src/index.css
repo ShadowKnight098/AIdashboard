@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F7F8FA;
+  --ink: #12172B;
+  --primary: #3654FF;
+  --evidence: #0F9C93;
+  --caution: #C98A2C;
+  --hairline: #E4E7EC;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* Flat Clean Card without Shadows */
+.flat-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E4E7EC;
+  border-radius: 8px;
+}
+
+.flat-card-interactive {
+  background-color: #FFFFFF;
+  border: 1px solid #E4E7EC;
+  border-radius: 8px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.flat-card-interactive:hover {
+  border-color: #CBD5E1;
+  background-color: #F8FAFC;
+}
+
+/* 6px Solid Indigo Button Token */
+.btn-primary {
+  background-color: #3654FF;
+  color: #FFFFFF;
+  border-radius: 6px;
+  font-weight: 500;
+  border: none;
+  transition: background-color 0.15s ease;
+}
+.btn-primary:hover {
+  background-color: #2742E8;
+}
+
+.btn-secondary {
+  background-color: #FFFFFF;
+  color: #12172B;
+  border: 1px solid #E4E7EC;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.btn-secondary:hover {
+  background-color: #F1F5F9;
+  border-color: #CBD5E1;
+}
+
+/* Evidence Mono annotation block */
+.evidence-quote {
+  font-family: 'IBM Plex Mono', monospace;
+  color: #0F9C93;
+  background-color: #F0FDF4;
+  border-left: 2.5px solid #0F9C93;
+  padding: 12px 14px;
+  border-radius: 0 6px 6px 0;
+}
+
+/* Reasoning Thread Line */
+.reasoning-thread-line {
+  height: 1.5px;
+  background-color: #3654FF;
+}
+
+/* Custom Thin Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 2px;
+}

@@ -136,7 +136,7 @@ export const db = {
     return localDb.reels.filter(r => r.is_candidate);
   },
 
-  async createReel(reel: Omit<Reel, 'id' | 'created_at'>): Promise<Reel> {
+  async createReel(reel: Omit<Reel, 'id' | 'created_at'>, uploadedBy?: string): Promise<Reel> {
     const newReel: Reel = {
       id: `30000000-0000-0000-0000-${String(localDb.reels.length + 1).padStart(12, '0')}`,
       ...reel,
@@ -144,7 +144,14 @@ export const db = {
     };
 
     if (supabase) {
-      const { data, error } = await getClient().from('reels').insert(newReel).select().single();
+      const { data, error } = await getClient()
+        .from('reels')
+        .insert({
+          ...newReel,
+          uploaded_by: uploadedBy || null,
+        })
+        .select()
+        .single();
       if (error) throw error;
       return data as Reel;
     }

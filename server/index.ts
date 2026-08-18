@@ -528,7 +528,7 @@ app.post('/api/reels/upload', async (req, res) => {
       thumbnail_url: thumbnail_url || null,
       duration_seconds: Number(duration_seconds) || 45,
       is_candidate: true,
-    });
+    }, userId);
 
     console.log(`🎬 Reel uploaded by ${userId}: "${reel.title}"`);
     res.json({ success: true, reel });

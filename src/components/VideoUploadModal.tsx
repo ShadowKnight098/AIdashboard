@@ -48,7 +48,6 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
     'Career',
     'WebDev',
     'DevOps',
-    'Timepass',
   ];
   const formats: Format[] = [
     'Explainer',
@@ -57,26 +56,23 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
     'Meme',
     'Vlog',
     'News',
-    'Timepass',
-    'Study',
-    'Building',
   ];
   const difficulties: Difficulty[] = ['Beginner', 'Intermediate', 'Advanced'];
 
   const handlePillarChange = (newPillar: ContentPillar) => {
     setPillar(newPillar);
     if (newPillar === 'Timepass') {
-      setCategory('Timepass');
-      setFormat('Timepass');
+      setCategory('Career');
+      setFormat('Meme');
       setEducationalValue(25);
       setHypeScore(80);
     } else if (newPillar === 'Building') {
-      if (category === 'Timepass') setCategory('WebDev');
+      setCategory('WebDev');
       setFormat('Tutorial');
       setEducationalValue(85);
       setHypeScore(15);
     } else {
-      if (category === 'Timepass') setCategory('HLD');
+      setCategory('HLD');
       setFormat('Explainer');
       setEducationalValue(95);
       setHypeScore(10);
@@ -109,7 +105,7 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title) { setError('Title is required'); return; }
+    if (!title.trim()) { setError('Title is required'); return; }
 
     let videoUrl = '';
 
@@ -118,13 +114,13 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
       setError(null);
 
       if (useDirectUrl) {
-        if (!directUrl) { setError('Paste a video URL'); setUploading(false); return; }
-        videoUrl = directUrl;
+        if (!directUrl.trim()) { setError('Paste a video URL'); setUploading(false); return; }
+        videoUrl = directUrl.trim();
       } else {
         // Upload file to Supabase Storage
         if (!videoFile) { setError('Select a video file'); setUploading(false); return; }
 
-        setUploadProgress('Uploading to Supabase Storage...');
+        setUploadProgress('Uploading video to Supabase Storage...');
         const filename = `${Date.now()}-${videoFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
         const { data, error: uploadErr } = await supabase.storage
           .from('reels-videos')
@@ -138,17 +134,17 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
         // Get public URL
         const { data: urlData } = supabase.storage.from('reels-videos').getPublicUrl(data.path);
         videoUrl = urlData.publicUrl;
-        setUploadProgress('Video uploaded! Saving reel metadata...');
+        setUploadProgress('Video uploaded! Saving reel metadata to database...');
       }
 
       // Save reel metadata via API
       await api.uploadReel({
-        title,
-        description: description || title,
-        transcript: transcript || description || title,
+        title: title.trim(),
+        description: (description || title).trim(),
+        transcript: (transcript || description || title).trim(),
         category,
         difficulty,
-        format: pillar === 'Timepass' ? 'Timepass' : format,
+        format,
         educational_value: educationalValue,
         hype_score: hypeScore,
         video_url: videoUrl,
@@ -160,7 +156,8 @@ export const VideoUploadModal: React.FC<VideoUploadModalProps> = ({ isOpen, onCl
       // Reset form
       setTitle(''); setDescription(''); setTranscript(''); setVideoFile(null); setDirectUrl('');
     } catch (err: any) {
-      setError(err.message || 'Upload failed');
+      console.error('Reel upload error:', err);
+      setError(err.message || 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
       setUploadProgress('');

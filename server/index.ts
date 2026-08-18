@@ -66,6 +66,13 @@ app.use((req, _res, next) => {
   next();
 });
 
+function handleApiError(res: express.Response, err: any, actionName: string) {
+  const msg = err?.message || 'Unknown error occurred';
+  const isAuth = msg === 'Not authenticated' || msg === 'Invalid or expired token' || msg.includes('JWT') || msg.includes('token');
+  console.error(`❌ [API Error] ${actionName}:`, msg);
+  res.status(isAuth ? 401 : 500).json({ error: msg });
+}
+
 async function ensureStorageBucketExists() {
   if (!isSupabaseConfigured || !supabaseGlobal) return;
   try {
@@ -92,16 +99,29 @@ async function ensureReelsSeeded() {
   if (!isSupabaseConfigured || !supabaseGlobal) return;
   try {
     const { count } = await supabaseGlobal.from('reels').select('*', { count: 'exact', head: true });
-    if (count && count > 0) { console.log(`✓ Reels: ${count} rows`); return; }
-    console.log('⏳ Seeding reels...');
+    if (count && count >= ALL_SEEDED_REELS.length) {
+      console.log(`✓ Reels: ${count} rows`);
+      return;
+    }
+    console.log('⏳ Ensuring seed reels in Supabase...');
     const rows = ALL_SEEDED_REELS.map(r => ({
-      id: r.id, title: r.title, description: r.description, transcript: r.transcript,
-      category: r.category, difficulty: r.difficulty, thumbnail_url: r.thumbnail_url || null,
-      source_url: r.source_url || null, video_url: r.video_url, duration_seconds: r.duration_seconds,
-      format: r.format, educational_value: r.educational_value, hype_score: r.hype_score,
-      is_candidate: r.is_candidate, uploaded_by: null, created_at: r.created_at,
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      transcript: r.transcript,
+      category: r.category,
+      difficulty: r.difficulty,
+      thumbnail_url: r.thumbnail_url || null,
+      source_url: r.source_url || null,
+      video_url: r.video_url,
+      duration_seconds: r.duration_seconds,
+      format: r.format,
+      educational_value: r.educational_value,
+      hype_score: r.hype_score,
+      is_candidate: r.is_candidate,
+      created_at: r.created_at,
     }));
-    const { error } = await supabaseGlobal.from('reels').insert(rows);
+    const { error } = await supabaseGlobal.from('reels').upsert(rows, { onConflict: 'id' });
     if (error) console.error('Seed error:', error.message);
     else console.log(`✓ Seeded ${rows.length} reels.`);
   } catch (err: any) {
@@ -217,7 +237,7 @@ app.get('/api/dashboard', async (req, res) => {
     });
 
   } catch (err: any) {
-    res.status(401).json({ error: err.message });
+    handleApiError(res, err, 'Dashboard');
   }
 });
 
@@ -255,7 +275,7 @@ app.get('/api/feed', async (req, res) => {
 
     res.json({ feed: feedItems, total: feedItems.length });
   } catch (err: any) {
-    res.status(401).json({ error: err.message });
+    handleApiError(res, err, 'Feed');
   }
 });
 
@@ -293,7 +313,7 @@ app.get('/api/similar-reels/:reelId', async (req, res) => {
       similar_reels: similar.map(r => ({ ...r, is_similar: true })),
     });
   } catch (err: any) {
-    res.status(err.message === 'Not authenticated' ? 401 : 500).json({ error: err.message });
+    handleApiError(res, err, 'Similar Reels');
   }
 });
 
@@ -352,7 +372,7 @@ app.post('/api/interactions', async (req, res) => {
 
     res.json({ success: true, interaction: record, dynamic_recommendation: dynamicRecommendation, similar_reels: similarReels });
   } catch (err: any) {
-    res.status(err.message === 'Not authenticated' ? 401 : 500).json({ error: err.message });
+    handleApiError(res, err, 'Interactions');
   }
 });
 
@@ -379,7 +399,7 @@ app.post('/api/analyze-reel', async (req, res) => {
 
     res.json({ reel, analysis, similar_reels: similar });
   } catch (err: any) {
-    res.status(err.message === 'Not authenticated' ? 401 : 500).json({ error: err.message });
+    handleApiError(res, err, 'Analyze Reel');
   }
 });
 
@@ -425,8 +445,7 @@ app.post('/api/infer-interest', async (req, res) => {
 
     res.json({ interest_profile: savedProfile, session_result: sessionResult });
   } catch (err: any) {
-    console.error('[infer-interest] error:', err.message);
-    res.status(err.message === 'Not authenticated' ? 401 : 500).json({ error: err.message });
+    handleApiError(res, err, 'Infer Interest');
   }
 });
 
@@ -486,8 +505,7 @@ CONFIDENCE                : High
       });
     }
   } catch (err: any) {
-    console.error('[recommend] auth error:', err.message);
-    res.status(err.message === 'Not authenticated' ? 401 : 500).json({ error: err.message });
+    handleApiError(res, err, 'Recommendation');
   }
 });
 
@@ -500,7 +518,7 @@ app.get('/api/reels', async (req, res) => {
     const reels = await db.getAllReels();
     res.json({ reels });
   } catch (err: any) {
-    res.status(401).json({ error: err.message });
+    handleApiError(res, err, 'Get Reels');
   }
 });
 
@@ -510,30 +528,43 @@ app.get('/api/reels', async (req, res) => {
 app.post('/api/reels/upload', async (req, res) => {
   try {
     const userId = await getUserId(req);
-    const { title, description, transcript, category, difficulty, format,
-            educational_value, hype_score, video_url, thumbnail_url, duration_seconds } = req.body;
+    const {
+      title,
+      description,
+      transcript,
+      category,
+      difficulty,
+      format,
+      educational_value,
+      hype_score,
+      video_url,
+      thumbnail_url,
+      duration_seconds,
+    } = req.body;
 
-    if (!title || !category || !video_url) return res.status(400).json({ error: 'title, category, video_url required' });
+    if (!title?.trim() || !category || !video_url?.trim()) {
+      return res.status(400).json({ error: 'Title, category, and video URL are required' });
+    }
 
     const reel = await db.createReel({
-      title,
-      description: description || title,
-      transcript: transcript || description || title,
+      title: title.trim(),
+      description: (description || title).trim(),
+      transcript: (transcript || description || title).trim(),
       category,
       difficulty: difficulty || 'Intermediate',
       format: format || 'Tutorial',
       educational_value: Number(educational_value) || 85,
       hype_score: Number(hype_score) || 15,
-      video_url,
+      video_url: video_url.trim(),
       thumbnail_url: thumbnail_url || null,
       duration_seconds: Number(duration_seconds) || 45,
       is_candidate: true,
     }, userId);
 
-    console.log(`🎬 Reel uploaded by ${userId}: "${reel.title}"`);
+    console.log(`🎬 Reel uploaded by ${userId}: "${reel.title}" (${reel.id})`);
     res.json({ success: true, reel });
   } catch (err: any) {
-    res.status(err.message === 'Not authenticated' ? 401 : 500).json({ error: err.message });
+    handleApiError(res, err, 'Upload Reel');
   }
 });
 
@@ -553,7 +584,7 @@ app.post('/api/demo/reset', async (req, res) => {
     }
     res.json({ success: true });
   } catch (err: any) {
-    res.status(401).json({ error: err.message });
+    handleApiError(res, err, 'Reset Session');
   }
 });
 

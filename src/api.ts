@@ -15,6 +15,18 @@ async function authHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
+async function handleResponse<T>(res: Response, prefix: string): Promise<T> {
+  if (!res.ok) {
+    let errorMsg = res.statusText;
+    try {
+      const data = await res.json();
+      if (data?.error) errorMsg = data.error;
+    } catch {}
+    throw new Error(`${prefix}: ${errorMsg || 'Request failed'}`);
+  }
+  return res.json();
+}
+
 export const api = {
   // Dashboard (uses logged-in user from token)
   async getDashboard(): Promise<DashboardData & {
@@ -27,8 +39,7 @@ export const api = {
     };
   }> {
     const res = await fetch(`${API_BASE}/dashboard`, { headers: await authHeaders() });
-    if (!res.ok) throw new Error(`Dashboard: ${res.statusText}`);
-    return res.json();
+    return handleResponse(res, 'Dashboard');
   },
 
   // Feed
@@ -37,8 +48,7 @@ export const api = {
     const sharedReelId = params.get('reel');
     const url = sharedReelId ? `${API_BASE}/feed?reel=${sharedReelId}` : `${API_BASE}/feed`;
     const res = await fetch(url, { headers: await authHeaders() });
-    if (!res.ok) throw new Error(`Feed: ${res.statusText}`);
-    return res.json();
+    return handleResponse(res, 'Feed');
   },
 
   // Record interaction (with watch_seconds for 10-second trigger)
@@ -55,15 +65,13 @@ export const api = {
       headers: await authHeaders(),
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`Interaction: ${res.statusText}`);
-    return res.json();
+    return handleResponse(res, 'Interaction');
   },
 
   // Get similar reels by category/difficulty
   async getSimilarReels(reelId: string): Promise<{ source_reel: Reel; similar_reels: Reel[] }> {
     const res = await fetch(`${API_BASE}/similar-reels/${reelId}`, { headers: await authHeaders() });
-    if (!res.ok) throw new Error(`Similar: ${res.statusText}`);
-    return res.json();
+    return handleResponse(res, 'Similar Reels');
   },
 
   // Analyze a reel
@@ -73,8 +81,7 @@ export const api = {
       headers: await authHeaders(),
       body: JSON.stringify({ reel_id: reelId }),
     });
-    if (!res.ok) throw new Error(`Analyze: ${res.statusText}`);
-    return res.json();
+    return handleResponse(res, 'Analyze');
   },
 
   // Infer interest from session
@@ -83,8 +90,7 @@ export const api = {
       method: 'POST',
       headers: await authHeaders(),
     });
-    if (!res.ok) throw new Error(`Infer: ${res.statusText}`);
-    return res.json();
+    return handleResponse(res, 'Infer');
   },
 
   // Get recommendation
@@ -107,15 +113,13 @@ export const api = {
       method: 'POST',
       headers: await authHeaders(),
     });
-    if (!res.ok) throw new Error(`Recommend: ${res.statusText}`);
-    return res.json();
+    return handleResponse(res, 'Recommendation');
   },
 
   // Get all reels
   async getAllReels(): Promise<{ reels: Reel[] }> {
     const res = await fetch(`${API_BASE}/reels`, { headers: await authHeaders() });
-    if (!res.ok) throw new Error(`Reels: ${res.statusText}`);
-    return res.json();
+    return handleResponse(res, 'Reels');
   },
 
   // Upload a new reel (metadata — video file uploaded separately to Supabase Storage)
@@ -137,12 +141,12 @@ export const api = {
       headers: await authHeaders(),
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`Upload: ${res.statusText}`);
-    return res.json();
+    return handleResponse(res, 'Upload');
   },
 
   // Reset demo (dev only)
   async resetDemo(): Promise<void> {
-    await fetch(`${API_BASE}/demo/reset`, { method: 'POST', headers: await authHeaders() });
+    const res = await fetch(`${API_BASE}/demo/reset`, { method: 'POST', headers: await authHeaders() });
+    return handleResponse(res, 'Reset');
   },
 };
